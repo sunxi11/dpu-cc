@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="dpu-soc-new (41644a4f-4be5-4b3d-b59a-e5892615ed7d)" remoteFilesAllowedToDisappearOnAutoupload="false">
+    <serverData>
+      <paths name="dpu-soc-new (41644a4f-4be5-4b3d-b59a-e5892615ed7d)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/ubuntu/sunxi/simple_fwd_vnf" local="$PROJECT_DIR$" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-dpu-soc" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>

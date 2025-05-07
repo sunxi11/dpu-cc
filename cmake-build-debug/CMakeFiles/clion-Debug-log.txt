@@ -1,0 +1,11 @@
+/Applications/CLion.app/Contents/bin/cmake/mac/bin/cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_MAKE_PROGRAM=/Applications/CLion.app/Contents/bin/ninja/mac/ninja -G Ninja -S /Users/sun/CLionProjects/dpu-cc -B /Users/sun/CLionProjects/dpu-cc/cmake-build-debug
+-- Checking for module 'doca-common'
+--   No package 'doca-common' found
+CMake Error at /Applications/CLion.app/Contents/bin/cmake/mac/share/cmake-3.26/Modules/FindPkgConfig.cmake:607 (message):
+  A required package was not found
+Call Stack (most recent call first):
+  /Applications/CLion.app/Contents/bin/cmake/mac/share/cmake-3.26/Modules/FindPkgConfig.cmake:829 (_pkg_check_modules_internal)
+  CMakeLists.txt:19 (pkg_check_modules)
+
+
+-- Configuring incomplete, errors occurred!
