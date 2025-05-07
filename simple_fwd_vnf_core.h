@@ -30,6 +30,8 @@
 
 #include "app_vnf.h"
 
+#define NUM_QOS_LEVELS 6
+
 /* Simple FWD VNF application configuration */
 struct simple_fwd_config {
 	struct application_dpdk_config *dpdk_cfg; /* DPDK configurations */
@@ -78,7 +80,7 @@ void simple_fwd_process_pkts_stop(void);
  *
  * @nb_queues [in]: number of queues to map
  */
-void simple_fwd_map_queue(uint16_t nb_queues);
+void simple_fwd_map_queue(uint16_t nb_queues, uint16_t nb_tx);
 
 /*
  * Destroys all allocated resources used by the application
@@ -86,5 +88,7 @@ void simple_fwd_map_queue(uint16_t nb_queues);
  * @vnf [in]: application allocated resources such as ports, pipes and entries.
  */
 void simple_fwd_destroy(struct app_vnf *vnf);
+
+int init_ring_buffers(struct rte_ring **rx_ring_buffers, int num_qos);
 
 #endif /* SIMPLE_FWD_VNF_CORE_H_ */
