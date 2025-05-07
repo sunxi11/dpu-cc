@@ -71,6 +71,7 @@ DOCA_LOG_REGISTER(SIMPLE_FWD_VNF : Core);
 /* Flag for forcing lcores to stop processing packets, and gracefully terminate the application */
 static volatile bool force_quit;
 extern struct simple_fwd_process_pkts_params process_pkts_params;
+extern struct rte_ring *rx_ring_buffers[NUM_QOS_LEVELS];
 
 /* Parameters used by each core */
 struct vnf_per_core_params {
