@@ -822,98 +822,11 @@ static int simple_fwd_add_control_pipe_entries(struct simple_fwd_port_cfg *port_
 	struct entries_status *status;
 	doca_error_t result;
 	uint8_t priority = 0;
-	int nb_entries = 6;
+	int nb_entries = 3;
 
 	status = (struct entries_status *)calloc(1, sizeof(struct entries_status));
 	if (unlikely(status == NULL))
 		return -1;
-
-	memset(&match, 0, sizeof(match));
-	memset(&fwd, 0, sizeof(fwd));
-
-	match.parser_meta.outer_l3_type = DOCA_FLOW_L3_META_IPV4;
-	match.parser_meta.outer_l4_type = DOCA_FLOW_L4_META_UDP;
-	match.outer.l4_type_ext = DOCA_FLOW_L4_TYPE_EXT_UDP;
-	match.outer.udp.l4_port.dst_port = rte_cpu_to_be_16(DOCA_FLOW_VXLAN_DEFAULT_PORT);
-
-	fwd.type = DOCA_FLOW_FWD_PIPE;
-	fwd.next_pipe = simple_fwd_ins->pipe_vxlan[port_cfg->port_id];
-
-	result = doca_flow_pipe_control_add_entry(0,
-						  priority,
-						  simple_fwd_ins->pipe_control[port_cfg->port_id],
-						  &match,
-						  NULL,
-						  NULL,
-						  NULL,
-						  NULL,
-						  NULL,
-						  NULL,
-						  &fwd,
-						  status,
-						  &entry);
-	if (result != DOCA_SUCCESS) {
-		free(status);
-		return -1;
-	}
-
-	memset(&match, 0, sizeof(match));
-	memset(&fwd, 0, sizeof(fwd));
-
-	match.parser_meta.outer_l3_type = DOCA_FLOW_L3_META_IPV4;
-	match.outer.l3_type = DOCA_FLOW_L3_TYPE_IP4;
-	match.outer.ip4.next_proto = DOCA_FLOW_PROTO_GRE;
-
-	fwd.type = DOCA_FLOW_FWD_PIPE;
-	fwd.next_pipe = simple_fwd_ins->pipe_gre[port_cfg->port_id];
-
-	result = doca_flow_pipe_control_add_entry(0,
-						  priority,
-						  simple_fwd_ins->pipe_control[port_cfg->port_id],
-						  &match,
-						  NULL,
-						  NULL,
-						  NULL,
-						  NULL,
-						  NULL,
-						  NULL,
-						  &fwd,
-						  status,
-						  &entry);
-	if (result != DOCA_SUCCESS) {
-		free(status);
-		return -1;
-	}
-
-	memset(&match, 0, sizeof(match));
-	memset(&fwd, 0, sizeof(fwd));
-
-	match.parser_meta.outer_l3_type = DOCA_FLOW_L3_META_IPV4;
-	match.parser_meta.outer_l4_type = DOCA_FLOW_L4_META_UDP;
-	match.outer.l4_type_ext = DOCA_FLOW_L4_TYPE_EXT_UDP;
-	match.outer.udp.l4_port.dst_port = rte_cpu_to_be_16(DOCA_FLOW_GTPU_DEFAULT_PORT);
-	fwd.type = DOCA_FLOW_FWD_PIPE;
-	fwd.next_pipe = simple_fwd_ins->pipe_gtp[port_cfg->port_id];
-
-	result = doca_flow_pipe_control_add_entry(0,
-						  priority,
-						  simple_fwd_ins->pipe_control[port_cfg->port_id],
-						  &match,
-						  NULL,
-						  NULL,
-						  NULL,
-						  NULL,
-						  NULL,
-						  NULL,
-						  &fwd,
-						  status,
-						  &entry);
-	if (result != DOCA_SUCCESS) {
-		free(status);
-		return -1;
-	}
-
-
 
     //UDP 的数据包发送到 RSS，DPDK 处理
     memset(&match, 0 ,sizeof(match));
@@ -1220,25 +1133,6 @@ static int simple_fwd_init_ports_and_pipes(struct simple_fwd_port_cfg *port_cfg)
 			DOCA_LOG_ERR("Failed building RSS flow");
 			return -1;
 		}
-
-		result = simple_fwd_create_match_pipe(curr_port_cfg, DOCA_FLOW_TUN_VXLAN);
-		if (result < 0) {
-			DOCA_LOG_ERR("Failed building VXLAN pipe");
-			return -1;
-		}
-
-		result = simple_fwd_create_match_pipe(curr_port_cfg, DOCA_FLOW_TUN_GTPU);
-		if (result < 0) {
-			DOCA_LOG_ERR("Failed building GTPU pipe");
-			return -1;
-		}
-
-		result = simple_fwd_create_match_pipe(curr_port_cfg, DOCA_FLOW_TUN_GRE);
-		if (result < 0) {
-			DOCA_LOG_ERR("Failed building GRE pipe");
-			return -1;
-		}
-
 		result = simple_fwd_create_control_pipe(curr_port_cfg);
 		if (result < 0) {
 			DOCA_LOG_ERR("Failed building control pipe");
