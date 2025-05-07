@@ -822,7 +822,7 @@ static int simple_fwd_add_control_pipe_entries(struct simple_fwd_port_cfg *port_
 	struct entries_status *status;
 	doca_error_t result;
 	uint8_t priority = 0;
-	int nb_entries = 4;
+	int nb_entries = 6;
 
 	status = (struct entries_status *)calloc(1, sizeof(struct entries_status));
 	if (unlikely(status == NULL))
@@ -892,7 +892,6 @@ static int simple_fwd_add_control_pipe_entries(struct simple_fwd_port_cfg *port_
 	match.parser_meta.outer_l4_type = DOCA_FLOW_L4_META_UDP;
 	match.outer.l4_type_ext = DOCA_FLOW_L4_TYPE_EXT_UDP;
 	match.outer.udp.l4_port.dst_port = rte_cpu_to_be_16(DOCA_FLOW_GTPU_DEFAULT_PORT);
-
 	fwd.type = DOCA_FLOW_FWD_PIPE;
 	fwd.next_pipe = simple_fwd_ins->pipe_gtp[port_cfg->port_id];
 
@@ -914,14 +913,73 @@ static int simple_fwd_add_control_pipe_entries(struct simple_fwd_port_cfg *port_
 		return -1;
 	}
 
+
+
+    //UDP 的数据包发送到 RSS，DPDK 处理
+    memset(&match, 0 ,sizeof(match));
+    memset(&fwd, 0, sizeof(fwd));
+
+    match.parser_meta.outer_l3_type = DOCA_FLOW_L3_META_IPV4;
+    match.parser_meta.outer_l4_type = DOCA_FLOW_L4_META_UDP;
+//    match.outer.l4_type_ext = DOCA_FLOW_L4_TYPE_EXT_UDP;
+
+    fwd.type = DOCA_FLOW_FWD_PIPE;
+    fwd.next_pipe = simple_fwd_ins->pipe_rss[port_cfg->port_id];
+    result = doca_flow_pipe_control_add_entry(0,
+						  priority,
+						  simple_fwd_ins->pipe_control[port_cfg->port_id],
+						  &match,
+						  NULL,
+						  NULL,
+						  NULL,
+						  NULL,
+						  NULL,
+						  NULL,
+						  &fwd,
+						  status,
+						  &entry);
+	if (result != DOCA_SUCCESS) {
+		free(status);
+		return -1;
+	}
+
+
+    //TCP 的高优先级数据包 直接转发 (目的端口是 8888)
+    memset(&match, 0 ,sizeof(match));
+    memset(&fwd, 0, sizeof(fwd));
+
+    match.parser_meta.outer_l3_type = DOCA_FLOW_L3_META_IPV4;
+    match.parser_meta.outer_l4_type = DOCA_FLOW_L4_META_TCP;
+    match.outer.l4_type_ext = DOCA_FLOW_L4_TYPE_EXT_TCP;
+    match.outer.tcp.l4_port.dst_port = rte_cpu_to_be_16(8888);
+
+    fwd.type = DOCA_FLOW_FWD_PIPE;
+    fwd.next_pipe = simple_fwd_ins->pipe_hairpin[port_cfg->port_id];
+    result = doca_flow_pipe_control_add_entry(0,
+                                              priority,
+                                              simple_fwd_ins->pipe_control[port_cfg->port_id],
+                                              &match,
+                                              NULL,
+                                              NULL,
+                                              NULL,
+                                              NULL,
+                                              NULL,
+                                              NULL,
+                                              &fwd,
+                                              status,
+                                              &entry);
+    if (result != DOCA_SUCCESS) {
+        free(status);
+        return -1;
+    }
+
+
 	memset(&match, 0, sizeof(match));
 	memset(&fwd, 0, sizeof(fwd));
 
 	priority = 1;
 	fwd.type = DOCA_FLOW_FWD_PIPE;
 
-    //改动了这里，没有被匹配上的包发送给rss
-//    fwd.next_pipe = simple_fwd_ins->pipe_rss[port_cfg->port_id];
     fwd.next_pipe = simple_fwd_ins->pipe_hairpin[port_cfg->port_id];
 
 
@@ -1192,20 +1250,10 @@ static int simple_fwd_init_ports_and_pipes(struct simple_fwd_port_cfg *port_cfg)
 			DOCA_LOG_ERR("Failed adding entries to the control pipe");
 			return -1;
 		}
-
-		curr_port_cfg->port_id = port_id ^ 1;
-		result = simple_fwd_create_vxlan_encap_pipe(curr_port_cfg);
-		if (result != DOCA_SUCCESS) {
-			DOCA_LOG_ERR("Failed to create vxlan encap pipe: %s", doca_error_get_descr(result));
-			return -1;
-		}
-
-		result = simple_fwd_add_vxlan_encap_pipe_entry(curr_port_cfg);
-		if (result != DOCA_SUCCESS) {
-			DOCA_LOG_ERR("Failed to add entry to vxlan encap pipe: %s", doca_error_get_descr(result));
-			return -1;
-		}
 	}
+
+
+
 
 	return 0;
 }
