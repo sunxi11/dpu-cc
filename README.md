@@ -3,8 +3,7 @@
 
 
 # 1、系统架构
-
-![yuque_mind.jpeg](..%2F..%2FDownloads%2Fyuque_mind.jpeg)
+![yuque_mind.jpeg](yuque_mind.jpeg)
 
 
 1. 优先级和端口绑定，最高优先级直接走 fast path ，通过硬件路径转发到 uplink （host）
