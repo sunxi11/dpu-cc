@@ -30,7 +30,7 @@
 
 #include "app_vnf.h"
 
-#define NUM_QOS_LEVELS 6
+#define NUM_QOS_LEVELS 8
 
 /* Simple FWD VNF application configuration */
 struct simple_fwd_config {
@@ -89,6 +89,6 @@ void simple_fwd_map_queue(uint16_t nb_queues, uint16_t nb_tx);
  */
 void simple_fwd_destroy(struct app_vnf *vnf);
 
-int init_ring_buffers(struct rte_ring **rx_ring_buffers, int num_qos);
+int init_ring_buffers(struct rte_ring **rx_ring_buffers);
 
 #endif /* SIMPLE_FWD_VNF_CORE_H_ */

@@ -189,7 +189,7 @@ int main(int argc, char **argv)
     int main_core_id = rte_get_main_lcore();
     printf("main core = %d\n", main_core_id);
 
-    result = init_ring_buffers(rx_ring_buffers, NUM_QOS_LEVELS);
+    result = init_ring_buffers(rx_ring_buffers);
     if (result != DOCA_SUCCESS) {
         DOCA_LOG_ERR("Failed to create ring buffer");
         return result;
