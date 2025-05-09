@@ -64,15 +64,21 @@ DOCA_LOG_REGISTER(SIMPLE_FWD_VNF : Core);
 #define VNF_PKT_L2(M) rte_pktmbuf_mtod(M, uint8_t *) /* A marco that points to the start of the data in the mbuf */
 #define VNF_PKT_LEN(M) rte_pktmbuf_pkt_len(M)	     /* A marco that returns the length of the packet */
 #define VNF_RX_BURST_SIZE (32)			     /* Burst size of packets to read, RX burst read size */
+#define VNF_TX_BURST_SIZE (32)
+#define RX 1
+#define TX 2
+#define RATE_LIMITER 0
 
 /* Flag for forcing lcores to stop processing packets, and gracefully terminate the application */
 static volatile bool force_quit;
+extern struct simple_fwd_process_pkts_params process_pkts_params;
+extern struct rte_ring *rx_ring_buffers[NUM_QOS_LEVELS];
 
 /* Parameters used by each core */
 struct vnf_per_core_params {
 	int ports[NUM_OF_PORTS];  /* Ports identifiers */
 	int queues[NUM_OF_PORTS]; /* Queue mapped for the core running */
-	bool used;		  /* Whether the core is used or not */
+	int used;		  /* Whether the core is used or not */
 };
 
 /* per core parameters */
@@ -115,57 +121,170 @@ static void simple_fwd_process_offload(struct rte_mbuf *mbuf, uint16_t queue_id,
 	//vnf_adjust_mbuf(mbuf, &pinfo);
     pinfo->tos = ((struct rte_ipv4_hdr *)pinfo->outer.l3)->type_of_service;
 
-    printf("queue: %d TOS: 0x%02x\n", queue_id, pinfo->tos);
 
+    printf("queue: %d TOS: 0x%02x\n", queue_id, pinfo->tos);
+}
+
+int process_rx_thread(uint32_t core_id, uint16_t queue_id) {
+    uint16_t nb_rx, j;
+    int result;
+    uint64_t cur_tsc, last_tsc;
+    struct rte_mbuf *mbufs[VNF_RX_BURST_SIZE];
+    uint32_t port_id = 0;
+    struct simple_fwd_config *app_config = ((struct simple_fwd_process_pkts_params *)&process_pkts_params)->cfg;
+	struct app_vnf *vnf = ((struct simple_fwd_process_pkts_params *)&process_pkts_params)->vnf;
+
+//    struct simple_fwd_config *app_config = ((struct simple_fwd_process_pkts_params *)process_pkts_params)->cfg;
+
+
+    last_tsc = rte_rdtsc();
+    while (!force_quit) {
+        struct simple_fwd_pkt_info pinfo;
+        memset(&pinfo, 0, sizeof(struct simple_fwd_pkt_info));
+
+        for (port_id = 0; port_id < NUM_OF_PORTS; port_id++) {
+            nb_rx = rte_eth_rx_burst(port_id, queue_id, mbufs, VNF_RX_BURST_SIZE);
+            for (j = 0; j < nb_rx; j++) {
+                if (simple_fwd_parse_packet(VNF_PKT_L2(mbufs[j]), VNF_PKT_LEN(mbufs[j]), &pinfo))
+                    continue;
+                pinfo.orig_data = mbufs[j];
+                pinfo.orig_port_id = mbufs[j]->port;
+                pinfo.pipe_queue = queue_id;
+                pinfo.rss_hash = mbufs[j]->hash.rss;
+                if (pinfo.outer.l3_type != IPV4)
+                    continue;
+                //vnf->vnf_process_pkt(&pinfo);
+                //vnf_adjust_mbuf(mbuf, &pinfo);
+                pinfo.tos = ((struct rte_ipv4_hdr *)pinfo.outer.l3)->type_of_service;
+                printf("queue: %d TOS: 0x%02x\n", queue_id, pinfo.tos);
+                //  放入对应优先级 ring
+                if (rte_ring_enqueue(rx_ring_buffers[pinfo.tos], mbufs[j]) < 0) {
+                    // ring 满了，先弹出一个
+                    void *old_mbuf;
+                    if (rte_ring_dequeue(rx_ring_buffers[pinfo.tos], &old_mbuf) == 0) {
+                        rte_pktmbuf_free((struct rte_mbuf *)old_mbuf);
+                        rte_ring_enqueue(rx_ring_buffers[pinfo.tos], mbufs[j]);
+                    } else {
+                        rte_pktmbuf_free(mbufs[j]);
+                    }
+                }
+            }
+            if (app_config->age_thread)
+                vnf->vnf_flow_age(port_id, queue_id);
+        }
+    }
+
+    return 0;int process_rx_thread(uint32_t core_id, uint16_t queue_id) {
+        uint16_t nb_rx, j;
+        int result;
+        uint64_t cur_tsc, last_tsc;
+        struct rte_mbuf *mbufs[VNF_RX_BURST_SIZE];
+        uint32_t port_id = 0;
+        struct simple_fwd_config *app_config = ((struct simple_fwd_process_pkts_params *)&process_pkts_params)->cfg;
+        struct app_vnf *vnf = ((struct simple_fwd_process_pkts_params *)&process_pkts_params)->vnf;
+
+//    struct simple_fwd_config *app_config = ((struct simple_fwd_process_pkts_params *)process_pkts_params)->cfg;
+
+
+        last_tsc = rte_rdtsc();
+        while (!force_quit) {
+            struct simple_fwd_pkt_info pinfo;
+            memset(&pinfo, 0, sizeof(struct simple_fwd_pkt_info));
+
+            for (port_id = 0; port_id < NUM_OF_PORTS; port_id++) {
+                nb_rx = rte_eth_rx_burst(port_id, queue_id, mbufs, VNF_RX_BURST_SIZE);
+                for (j = 0; j < nb_rx; j++) {
+                    if (simple_fwd_parse_packet(VNF_PKT_L2(mbufs[j]), VNF_PKT_LEN(mbufs[j]), &pinfo))
+                        continue;
+                    pinfo.orig_data = mbufs[j];
+                    pinfo.orig_port_id = mbufs[j]->port;
+                    pinfo.pipe_queue = queue_id;
+                    pinfo.rss_hash = mbufs[j]->hash.rss;
+                    if (pinfo.outer.l3_type != IPV4)
+                        continue;
+                    //vnf->vnf_process_pkt(&pinfo);
+                    //vnf_adjust_mbuf(mbuf, &pinfo);
+                    pinfo.tos = ((struct rte_ipv4_hdr *)pinfo.outer.l3)->type_of_service;
+                    printf("queue: %d TOS: 0x%02x\n", queue_id, pinfo.tos);
+                    //  放入对应优先级 ring
+                    if (rte_ring_enqueue(rx_ring_buffers[pinfo.tos], mbufs[j]) < 0) {
+                        // ring 满了，先弹出一个
+                        void *old_mbuf;
+                        if (rte_ring_dequeue(rx_ring_buffers[pinfo.tos], &old_mbuf) == 0) {
+                            rte_pktmbuf_free((struct rte_mbuf *)old_mbuf);
+                            rte_ring_enqueue(rx_ring_buffers[pinfo.tos], mbufs[j]);
+                        } else {
+                            rte_pktmbuf_free(mbufs[j]);
+                        }
+                    }
+                }
+                if (app_config->age_thread)
+                    vnf->vnf_flow_age(port_id, queue_id);
+            }
+        }
+
+        return 0;
+    }
+}
+
+int process_tx_thread() {
+    struct rte_mbuf *tx_mbufs[VNF_TX_BURST_SIZE];
+    uint16_t nb_tx, nb_deq;
+    uint32_t port_id = 0;  // 你可以根据实际情况使用多 port
+
+    while (!force_quit) {
+        // 高优先级优先
+        for (int prio = NUM_QOS_LEVELS - 1; prio >= 0; prio--) {
+            nb_deq = rte_ring_dequeue_burst(rx_ring_buffers[prio],
+                                            (void **)tx_mbufs,
+                                            VNF_TX_BURST_SIZE,
+                                            NULL);
+            if (nb_deq == 0)
+                continue; // 当前优先级无包，检查下一优先级
+
+            nb_tx = rte_eth_tx_burst(port_id, 0, tx_mbufs, nb_deq);
+
+            // 如果未全部发送，释放剩余 mbuf
+            if (unlikely(nb_tx < nb_deq)) {
+                for (uint16_t i = nb_tx; i < nb_deq; i++)
+                    rte_pktmbuf_free(tx_mbufs[i]);
+            }
+        }
+
+    }
+
+    return 0;
+}
+
+int process_rate_limiter() {
+    return 0;
 }
 
 int simple_fwd_process_pkts(void *process_pkts_params)
 {
-	int result;
-	uint64_t cur_tsc, last_tsc;
-	struct rte_mbuf *mbufs[VNF_RX_BURST_SIZE];
-	uint16_t j, nb_rx, queue_id;
-	uint32_t port_id = 0, core_id = rte_lcore_id();
+    //        if (core_id == rte_get_main_lcore()) {
+//            cur_tsc = rte_rdtsc();
+//            if (cur_tsc > last_tsc + app_config->stats_timer) {
+//                result = vnf->vnf_dump_stats(0);
+//                if (result != 0)
+//                    return result;
+//                last_tsc = cur_tsc;
+//            }
+//        }
+
+	uint32_t core_id = rte_lcore_id();
 	struct vnf_per_core_params *params = &core_params_arr[core_id];
-	struct simple_fwd_config *app_config = ((struct simple_fwd_process_pkts_params *)process_pkts_params)->cfg;
-	struct app_vnf *vnf = ((struct simple_fwd_process_pkts_params *)process_pkts_params)->vnf;
 
-//	if (!params->used) {
-//		DOCA_LOG_DBG("Core %u nothing need to do", core_id);
-//		return 0;
-//	}
-	DOCA_LOG_TRC("Core %u process queue %u start", core_id, params->queues[0]);
-    printf("Core %u process queue %u start\n", core_id, params->queues[0]);
-	last_tsc = rte_rdtsc();
-	while (!force_quit) {
-		if (core_id == rte_get_main_lcore()) {
-			cur_tsc = rte_rdtsc();
-			if (cur_tsc > last_tsc + app_config->stats_timer) {
-				result = vnf->vnf_dump_stats(0);
-				if (result != 0)
-					return result;
-				last_tsc = cur_tsc;
-			}
-		}
-        struct simple_fwd_pkt_info pinfo;
-        memset(&pinfo, 0, sizeof(struct simple_fwd_pkt_info));
-
-		for (port_id = 0; port_id < NUM_OF_PORTS; port_id++) {
-			queue_id = params->queues[port_id];
-			nb_rx = rte_eth_rx_burst(port_id, queue_id, mbufs, VNF_RX_BURST_SIZE);
-			for (j = 0; j < nb_rx; j++) {
-				if (app_config->hw_offload)
-					simple_fwd_process_offload(mbufs[j], queue_id, vnf, &pinfo);
-				if (app_config->rx_only || pinfo.tos == 1)
-					rte_pktmbuf_free(mbufs[j]);
-				else {
-                    rte_eth_tx_burst(port_id ^ 1, queue_id, &mbufs[j], 1);
-                }
-			}
-			if (app_config->age_thread)
-				vnf->vnf_flow_age(port_id, queue_id);
-		}
-	}
+    if(params->used == RX) {
+        DOCA_LOG_TRC("Core %u process queue %u start", core_id, params->queues[0]);
+        printf("Core %u process queue %u start\n", core_id, params->queues[0]);
+        process_rx_thread(core_id, params->queues[0]);
+    }else if (params->used == TX) {
+        printf("Core %u use for tx\n", core_id);
+        process_tx_thread();
+    }else{
+        printf("Core %u use for other\n", core_id);
+    }
 	return 0;
 }
 
@@ -400,26 +519,53 @@ doca_error_t register_simple_fwd_params(void)
 	return DOCA_SUCCESS;
 }
 
-void simple_fwd_map_queue(uint16_t nb_queues)
+void simple_fwd_map_queue(uint16_t nb_queues, uint16_t nb_tx)
 {
-	int i, queue_idx = 0;
 
+	int i;
 	memset(core_params_arr, 0, sizeof(core_params_arr));
-	for (i = 0; i < RTE_MAX_LCORE; i++) {
+	for (i = 1; i <= nb_queues; i++) {
+        int queue_idx = i % nb_queues;
 		if (!rte_lcore_is_enabled(i))
 			continue;
 		core_params_arr[i].ports[0] = 0;
 		core_params_arr[i].ports[1] = 1;
 		core_params_arr[i].queues[0] = queue_idx;
 		core_params_arr[i].queues[1] = queue_idx;
-		core_params_arr[i].used = true;
-		queue_idx++;
-		if (queue_idx >= nb_queues)
-			break;
+		core_params_arr[i].used = RX;
 	}
+
+    for (i = nb_queues + 1; i <= nb_queues + nb_tx; i++) {
+        if (!rte_lcore_is_enabled(i))
+            continue;
+        core_params_arr[i].used = TX;
+    }
+
 }
 
 void simple_fwd_destroy(struct app_vnf *vnf)
 {
 	vnf->vnf_destroy();
 }
+
+
+int init_ring_buffers(struct rte_ring **rx_ring_buffers) {
+    for (int i = 0; i < NUM_QOS_LEVELS; i++) {
+        char ring_name[32];
+        snprintf(ring_name, 32, "rx_ring_%d", i);
+
+        rx_ring_buffers[i] = rte_ring_create(
+                ring_name,
+                1024,
+                rte_socket_id(),
+                0  // MP/MC 模式
+        );
+
+        if (rx_ring_buffers[i] == NULL) {
+            rte_exit(EXIT_FAILURE, "Failed to create ring %d: %s\n", i, rte_strerror(rte_errno));
+        }
+    }
+
+    return 0;
+}
+

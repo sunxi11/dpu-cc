@@ -45,6 +45,8 @@ DOCA_LOG_REGISTER(SIMPLE_FWD_VNF);
 
 #define DEFAULT_NB_METERS (1 << 13) /* Maximum number of meters used */
 
+struct simple_fwd_process_pkts_params process_pkts_params;
+struct rte_ring *rx_ring_buffers[NUM_QOS_LEVELS];
 /*
  * Signal handler
  *
@@ -67,6 +69,14 @@ static void signal_handler(int signum)
  */
 int main(int argc, char **argv)
 {
+    uint16_t num_of_tx = 8;
+
+    /*
+     * Core 1 process queue 1 start
+     * Core 2 process queue 2 start
+     * Core 3 process queue 3 start
+     * Core 4 process queue 0 start
+     * */
 	doca_error_t result;
 	int exit_status = EXIT_SUCCESS;
 	struct doca_log_backend *logger;
@@ -74,7 +84,7 @@ int main(int argc, char **argv)
 	struct simple_fwd_port_cfg port_cfg = {0};
 	struct application_dpdk_config dpdk_config = {
 		.port_config.nb_ports = 2,
-		.port_config.nb_queues = 8,
+		.port_config.nb_queues = 4,
 		.port_config.nb_hairpin_q = 4,
 		.port_config.enable_mbuf_metadata = 1,
 		.reserve_main_thread = true,
@@ -88,7 +98,7 @@ int main(int argc, char **argv)
 		.is_hairpin = false,
 	};
 	struct app_vnf *vnf;
-	struct simple_fwd_process_pkts_params process_pkts_params = {.cfg = &app_cfg};
+    process_pkts_params.cfg = &app_cfg;
 	struct doca_flow_tune_server_cfg *server_cfg;
 
 	/* Register a logger backend */
@@ -179,8 +189,13 @@ int main(int argc, char **argv)
     int main_core_id = rte_get_main_lcore();
     printf("main core = %d\n", main_core_id);
 
+    result = init_ring_buffers(rx_ring_buffers);
+    if (result != DOCA_SUCCESS) {
+        DOCA_LOG_ERR("Failed to create ring buffer");
+        return result;
+    }
 
-	simple_fwd_map_queue(dpdk_config.port_config.nb_queues);
+	simple_fwd_map_queue(dpdk_config.port_config.nb_queues, num_of_tx);
 	process_pkts_params.vnf = vnf;
 	rte_eal_mp_remote_launch(simple_fwd_process_pkts, &process_pkts_params, CALL_MAIN);
 	rte_eal_mp_wait_lcore();
