@@ -46,7 +46,7 @@ DOCA_LOG_REGISTER(SIMPLE_FWD_VNF);
 #define DEFAULT_NB_METERS (1 << 13) /* Maximum number of meters used */
 
 struct simple_fwd_process_pkts_params process_pkts_params;
-struct rte_ring *rx_ring_buffers[NUM_QOS_LEVELS];
+struct rte_ring *rx_ring_buffers[NUM_OF_PORTS][NUM_QOS_LEVELS];
 /*
  * Signal handler
  *

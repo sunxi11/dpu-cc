@@ -89,6 +89,6 @@ void simple_fwd_map_queue(uint16_t nb_queues, uint16_t nb_tx);
  */
 void simple_fwd_destroy(struct app_vnf *vnf);
 
-int init_ring_buffers(struct rte_ring **rx_ring_buffers);
+int init_ring_buffers(struct rte_ring *rx_ring_buffers[NUM_OF_PORTS][NUM_QOS_LEVELS]);
 
 #endif /* SIMPLE_FWD_VNF_CORE_H_ */

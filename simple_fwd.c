@@ -553,6 +553,7 @@ static int simple_fwd_build_hairpin_flow(uint16_t port_id)
 
 	doca_flow_pipe_cfg_destroy(pipe_cfg);
 
+
 	result = doca_flow_pipe_add_entry(0,
 					  simple_fwd_ins->pipe_hairpin[port_cfg->port_id],
 					  &match,
@@ -887,6 +888,8 @@ static int simple_fwd_add_control_pipe_entries(struct simple_fwd_port_cfg *port_
     }
 
 
+    //其他数据包走hairpin
+
 	memset(&match, 0, sizeof(match));
 	memset(&fwd, 0, sizeof(fwd));
 
@@ -894,8 +897,6 @@ static int simple_fwd_add_control_pipe_entries(struct simple_fwd_port_cfg *port_
 	fwd.type = DOCA_FLOW_FWD_PIPE;
 
     fwd.next_pipe = simple_fwd_ins->pipe_hairpin[port_cfg->port_id];
-
-
 
 	result = doca_flow_pipe_control_add_entry(0,
 						  priority,
