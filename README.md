@@ -17,6 +17,18 @@
 /home/ubuntu/sunxi/simple_fwd_vnf/cmake-build-dpu-soc/simple-fwd-vnf -a auxiliary:mlx5_core.sf.4,dv_flow_en=2 -a auxiliary:mlx5_core.sf.5,dv_flow_en=2 -- -l 60 -o -a
 ```
 
+# 3、带宽测试
 
+1. 在 DPU 的 ARM 上运行该程序
+```shell
+/home/ubuntu/sunxi/simple_fwd_vnf/cmake-build-dpu-soc/simple-fwd-vnf -a auxiliary:mlx5_core.sf.4,dv_flow_en=2 -a auxiliary:mlx5_core.sf.5,dv_flow_en=2 -- -l 60 -o -a
+```
+2. 在 DPU 的 HOST 上（5866）运行 iperf 的服务端
+```shell
+iperf3 -s --port 3003
+```
 
-
+3. 在 5558 服务器上运行 iperf 的客户端
+```shell
+iperf3 -c 10.0.0.11 --port 3003
+```
