@@ -47,6 +47,23 @@ DOCA_LOG_REGISTER(SIMPLE_FWD_VNF);
 
 struct simple_fwd_process_pkts_params process_pkts_params;
 struct rte_ring *rx_ring_buffers[NUM_OF_PORTS][NUM_QOS_LEVELS];
+
+FILE *latency_log = NULL;
+
+void init_latency_log() {
+    latency_log = fopen("/home/ubuntu/packet_latency_ns.log", "w");
+    if (!latency_log) {
+        perror("fopen latency log");
+        exit(1);
+    }
+}
+
+void close_latency_log() {
+    if (latency_log) {
+        fclose(latency_log);
+    }
+}
+
 /*
  * Signal handler
  *
@@ -57,8 +74,10 @@ static void signal_handler(int signum)
 	if (signum == SIGINT || signum == SIGTERM) {
 		DOCA_LOG_INFO("Signal %d received, preparing to exit", signum);
 		simple_fwd_process_pkts_stop();
+        close_latency_log();
 	}
 }
+
 
 /*
  * Simple forward VNF application main function
@@ -67,9 +86,13 @@ static void signal_handler(int signum)
  * @argv [in]: array of command line arguments
  * @return: EXIT_SUCCESS on success and EXIT_FAILURE otherwise
  */
+
+
 int main(int argc, char **argv)
 {
     uint16_t num_of_tx = 8;
+
+    init_latency_log();
 
     /*
      * Core 1 process queue 1 start

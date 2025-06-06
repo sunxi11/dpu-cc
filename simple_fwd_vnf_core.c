@@ -69,10 +69,16 @@ DOCA_LOG_REGISTER(SIMPLE_FWD_VNF : Core);
 #define TX 2
 #define RATE_LIMITER 0
 
+static int latency_dynfield_offset = -1;
+#define GET_LATENCY_TS(m) \
+    ((uint64_t *)RTE_MBUF_DYNFIELD(m, latency_dynfield_offset, uint64_t *))
+
+
 /* Flag for forcing lcores to stop processing packets, and gracefully terminate the application */
 static volatile bool force_quit;
 extern struct simple_fwd_process_pkts_params process_pkts_params;
 extern struct rte_ring *rx_ring_buffers[NUM_OF_PORTS][NUM_QOS_LEVELS];
+extern FILE *latency_log;
 
 /* Parameters used by each core */
 struct vnf_per_core_params {
@@ -156,8 +162,7 @@ int process_rx_thread(uint32_t core_id, uint16_t queue_id) {
                 //vnf->vnf_process_pkt(&pinfo);
                 //vnf_adjust_mbuf(mbuf, &pinfo);
                 pinfo.tos = ((struct rte_ipv4_hdr *)pinfo.outer.l3)->type_of_service;
-//                printf("queue: %d TOS: 0x%02x\n", queue_id, pinfo.tos);
-                //  放入对应优先级 ring
+                *GET_LATENCY_TS(mbufs[j]) = rte_rdtsc();
                 if (rte_ring_enqueue(rx_ring_buffers[port_id][pinfo.tos], mbufs[j]) < 0) {
                     // ring 满了，先弹出一个
                     void *old_mbuf;
@@ -192,6 +197,11 @@ int process_tx_thread(uint32_t core_id) {
 
                 uint16_t dst_port = port_id ^ 1;
 
+                // TX：计算差值
+                uint64_t delta = rte_rdtsc() - *GET_LATENCY_TS(tx_mbufs[0]);
+                double latency_ns = (double)delta * 1e9 / rte_get_tsc_hz();
+                fprintf(latency_log, "%.2f\n", latency_ns);
+
                 nb_tx = rte_eth_tx_burst(dst_port, 0, tx_mbufs, nb_deq);
 //                printf("core %u, port %u -> %u, prio %d, dequeued %u, sent %u\n",
 //                       core_id, port_id, dst_port, prio, nb_deq, nb_tx);
@@ -212,6 +222,21 @@ int process_rate_limiter() {
     return 0;
 }
 
+
+void register_latency_field() {
+    struct rte_mbuf_dynfield field_desc = {
+            .name = "latency_ts",
+            .size = sizeof(uint64_t),
+            .align = __alignof__(uint64_t),
+            .flags = 0,
+    };
+    latency_dynfield_offset = rte_mbuf_dynfield_register(&field_desc);
+    if (latency_dynfield_offset < 0) {
+        rte_exit(EXIT_FAILURE, "Cannot register latency dynfield\n");
+    }
+}
+
+
 int simple_fwd_process_pkts(void *process_pkts_params)
 {
     //        if (core_id == rte_get_main_lcore()) {
@@ -223,6 +248,8 @@ int simple_fwd_process_pkts(void *process_pkts_params)
 //                last_tsc = cur_tsc;
 //            }
 //        }
+
+    register_latency_field();
 
 	uint32_t core_id = rte_lcore_id();
 	struct vnf_per_core_params *params = &core_params_arr[core_id];
